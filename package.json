@@ -9,7 +9,6 @@
   "source": "./index.ts",
   "exports": {
     ".": {
-      "development": "./index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs",
       "types": "./dist/index.d.ts"
