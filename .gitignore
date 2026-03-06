@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
+# Build output - Commented out because dist needs to be committed for GitHub installs
+# dist/
 *.tsbuildinfo
 
 # Environment
