@@ -33,18 +33,15 @@ import { DefaultScheduleBuilder } from './resources/schedule/DefaultScheduleBuil
 /**
  * EventsPlugin component (Primary API)
  * 
- * Accepts configuration props and returns Resource elements for React Admin.
- * Can be called as a function `EventsPlugin()` or rendered as JSX `<EventsPlugin />`.
- * 
- * Note: React Admin doesn't execute function components as children, so this must
- * be called as a function to get JSX elements: `{EventsPlugin()}` or `{EventsPlugin({ overrides: ... })}`
+ * Accepts configuration props and returns an array of Resource elements for React Admin.
+ * Must be called as a function and spread into Admin children.
  * 
  * @example
  * ```tsx
  * import { EventsPlugin } from '@quicklaunch/events-plugin';
  * 
  * <Admin dataProvider={dataProvider}>
- *   {EventsPlugin({
+ *   {...EventsPlugin({
  *     overrides: { EventList: CustomEventList },
  *     extraFields: { events: ['customField1'] }
  *   })}
@@ -115,7 +112,7 @@ export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
     React.createElement(DefaultSessionCreate as any, { FormComponent: SessionFormComponent, extraFields: sessionExtraFields })
   );
 
-  // Return Resource elements with applied overrides
+  // Return Resource elements with applied overrides as an array for direct JSX spread
   return [
     React.createElement(Resource, {
       key: "events",
@@ -147,15 +144,8 @@ export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
       edit: SessionEditComponent,
       create: SessionCreateComponent,
       icon: ScheduleIcon
-    }),
-    React.createElement(CustomRoutes, { 
-      key: "schedule-routes",
-      children: React.createElement(Route, { 
-        path: "/events/:id/schedule", 
-        element: React.createElement(ScheduleBuilderComponent) 
-      })
     })
-  ] as any;
+  ];
 };
 
 // ============================================================================

@@ -28,22 +28,41 @@ The Events Plugin extracts event management functionality from a monolithic Reac
 - Maintain type safety across plugin boundaries
 - Support versioned upgrades
 
+### Implementation Approach
+
+The plugin is implemented as a **function that returns an array of Resource elements**, not as a React component. This design is essential for compatibility with React Admin's architecture:
+
+```typescript
+// Plugin returns an array of ReactElement (Resource components)
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  // ... configuration and override resolution
+  return [/* Resource elements */];
+};
+
+// Used with spread operator in host app
+<Admin dataProvider={dataProvider}>
+  {...EventsPlugin({ overrides, extraFields })}
+</Admin>
+```
+
+**Why this matters**: React Admin discovers resources by inspecting direct children of the `<Admin>` component. Wrapping resources in a function component would hide them from React Admin's discovery mechanism, causing routing errors. By returning an array that gets spread into Admin's children, the Resources become direct children and are properly registered.
+
 ## Core Principles
 
 ### 1. Zero Configuration
 
-**Goal**: Plugin should work immediately after installation with `<EventsPlugin />`.
+**Goal**: Plugin should work immediately after installation with minimal code.
 
 **Implementation**:
 - Self-contained Resource components with all routes
 - Default components provided out-of-the-box
 - Peer dependencies ensure environment consistency
-- No required props on the plugin component
+- No required configuration parameters
 
 ```typescript
 // This is all you need!
 <Admin dataProvider={dataProvider}>
-  <EventsPlugin />
+  {...EventsPlugin()}
 </Admin>
 ```
 
@@ -94,8 +113,7 @@ The Events Plugin extracts event management functionality from a monolithic Reac
 ```text
 @quicklaunch/events-plugin/
 ├── src/
-│   ├── EventsPlugin.tsx       # Main registration component
-│   ├── index.ts               # Public API exports
+│   ├── index.ts               # Main plugin entry - exports EventsPlugin function
 │   ├── types/                 # TypeScript definitions
 │   │   ├── resources.ts       # Event, Speaker, Venue, Session types
 │   │   ├── config.ts          # Plugin configuration types
@@ -104,7 +122,6 @@ The Events Plugin extracts event management functionality from a monolithic Reac
 │   │   └── RecurrenceInput.tsx
 │   ├── resources/             # Resource modules
 │   │   ├── events/
-│   │   │   ├── index.tsx      # EventResource component
 │   │   │   ├── DefaultEventList.tsx
 │   │   │   ├── DefaultEventEdit.tsx
 │   │   │   ├── DefaultEventCreate.tsx
@@ -112,10 +129,6 @@ The Events Plugin extracts event management functionality from a monolithic Reac
 │   │   ├── speakers/
 │   │   ├── venues/
 │   │   └── schedule/
-│   ├── context/               # Configuration contexts
-│   │   ├── OverridesContext.tsx
-│   │   ├── PermissionsContext.tsx
-│   │   └── ExtraFieldsContext.tsx
 │   └── utils/                 # Utilities
 │       ├── eventValidators.ts
 │       └── recurringEvents.ts
@@ -167,44 +180,80 @@ export default defineConfig({
 
 **Problem**: How should plugin register its resources with React Admin?
 
-**Solution**: Return React Fragment with Resource components
+**Solution**: Return array of Resource elements that must be spread into Admin children
 
 **Why This Approach?**
 
-React Admin's `<Admin>` component uses `React.Children.map()` to discover `<Resource>` components at mount time. It cannot see Resources wrapped in custom provider components.
+React Admin's `<Admin>` component uses `React.Children.map()` to discover `<Resource>` components as **direct children** at mount time. It cannot see Resources wrapped in component functions or custom provider components. The plugin must return an array of Resource elements that can be spread directly into the Admin's children.
 
 **Implementation**:
 ```typescript
-// EventsPlugin.tsx
-export const EventsPlugin = (props: EventsPluginProps) => {
-  // Initialize configuration contexts
-  return (
-    <OverridesProvider overrides={props.overrides || {}}>
-      <PermissionsProvider permissions={props.permissions || {}}>
-        <ExtraFieldsProvider extraFields={props.extraFields || {}}>
-          {/* Resources must be direct children of React Fragment */}
-          <Resource name="events" {...EventResourceConfig} />
-          <Resource name="speakers" {...SpeakerResourceConfig} />
-          <Resource name="venues" {...VenueResourceConfig} />
-          <CustomRoutes>
-            <Route path="/schedule/:eventId" element={<ScheduleBuilder />} />
-          </CustomRoutes>
-        </ExtraFieldsProvider>
-      </PermissionsProvider>
-    </OverridesProvider>
-  );
+// index.ts
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  const {
+    overrides = {},
+    extraFields = {},
+    permissions = {},
+  } = props || {};
+  
+  // Apply component overrides and configuration
+  const EventListComponent = overrides.EventList || DefaultEventList;
+  // ... other component resolutions
+  
+  // Return array of Resource elements
+  return [
+    React.createElement(Resource, {
+      key: "events",
+      name: "events",
+      list: EventListComponent,
+      edit: EventEditComponent,
+      create: EventCreateComponent,
+      icon: EventIcon
+    }),
+    React.createElement(Resource, {
+      key: "speakers",
+      name: "speakers",
+      list: SpeakerListComponent,
+      edit: SpeakerEditComponent,
+      create: SpeakerCreateComponent,
+      icon: PersonIcon
+    }),
+    // ... other resources
+  ];
 };
 ```
 
+**Usage in Host App**:
+```typescript
+// App.tsx
+<Admin dataProvider={dataProvider} theme={theme}>
+  {/* Spread the array returned by EventsPlugin */}
+  {...EventsPlugin({
+    overrides: { EventList: CustomEventList },
+    extraFields: { events: ['customField'] }
+  })}
+</Admin>
+```
+
+**Critical Implementation Details**:
+- Plugin returns `ReactElement[]` (array of elements), not a component
+- Each Resource must have a unique `key` prop
+- Array must be spread using `{...EventsPlugin()}` syntax in Admin children
+- Cannot wrap in React Fragment or component - breaks React Admin's child discovery
+
 **Alternatives Considered**:
+- ❌ Component wrapper (`<EventsPlugin />`): React Admin cannot discover Resources inside function components
+- ❌ React Fragment return: Still wrapped in component, doesn't expose Resources as direct children
 - ❌ HOC wrapper: Breaks React Admin's child inspection
 - ❌ Imperative registration API: Not idiomatic for React Admin
 - ❌ Plugin hook: Requires changes to host App structure
 
 **Trade-offs**:
-- ✅ Works seamlessly with React Admin
-- ✅ Declarative and familiar
-- ⚠️ Resources must be declared at plugin definition time
+- ✅ Works seamlessly with React Admin's child discovery
+- ✅ Declarative and type-safe
+- ✅ Supports configuration via function parameters
+- ⚠️ Requires spread operator syntax (not JSX component syntax)
+- ⚠️ Resources must be declared at plugin call time
 
 ### Decision 2: Theme Inheritance via useTheme()
 
@@ -250,91 +299,136 @@ const EventCard = () => {
 - ❌ Theme prop: Redundant, requires prop drilling
 - ❌ CSS variables: Loses TypeScript safety
 
-### Decision 3: Context-Based Component Overrides
+### Decision 3: Props-Based Component Overrides
 
-**Problem**: How should custom components flow from plugin registration to usage?
+**Problem**: How should custom components flow from plugin registration to Resource elements?
 
-**Solution**: React Context pattern with `useOverride()` hook
+**Solution**: Direct resolution from function props
 
 **Why This Approach?**
 
-Overrides need to be accessible deep in the component tree without prop drilling. React Context provides clean access pattern while maintaining type safety.
+Since `EventsPlugin` is a function (not a component tree), we can directly access the `overrides` prop and resolve component overrides immediately when creating Resource elements. This is simpler than context and has no performance overhead.
 
 **Implementation**:
 ```typescript
-// OverridesContext.tsx
-const OverridesContext = createContext<OverridesConfig>({});
+// index.ts
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  const {
+    overrides = {},
+    extraFields = {},
+    permissions = {},
+  } = props || {};
+  
+  // Direct component resolution from props
+  const EventListComponent = overrides.EventList || DefaultEventList;
+  const EventFormComponent = overrides.EventForm || DefaultEventForm;
+  const EventEditComponent = overrides.EventEdit || DefaultEventEdit;
+  
+  // Create wrapper components that inject extraFields
+  const EventEditWithConfig = () => 
+    React.createElement(DefaultEventEdit, { 
+      FormComponent: EventFormComponent, 
+      extraFields: extraFields.events || [] 
+    });
+  
+  return [
+    React.createElement(Resource, {
+      key: "events",
+      name: "events",
+      list: EventListComponent,
+      edit: EventEditWithConfig,
+      // ... other actions
+    }),
+    // ... other resources
+  ];
+};
+```
 
-export const useOverride = <T extends ComponentType<any>>(
-  key: keyof OverridesConfig,
-  defaultComponent: T
-): T => {
-  const overrides = useContext(OverridesContext);
-  return (overrides[key] as T) || defaultComponent;
+**Benefits**:
+- ✅ Simple and direct - no context needed
+- ✅ Type-safe override keys via TypeScript interface
+- ✅ Fallback to defaults with `||` operator
+- ✅ No React Context overhead
+- ✅ Easy to test and debug
+
+**Alternatives Considered**:
+- ❌ React Context: Unnecessary complexity when we have direct prop access
+- ❌ Props drilling: Not needed since we resolve at registration time
+- ❌ Module-level configuration: Breaks with multiple plugin instances
+- ❌ Registry pattern: Over-engineered for current needs
+
+**Why Not Context?**
+
+Context is valuable when you need to share state across a component tree. Since `EventsPlugin` returns an array of elements rather than rendering a tree, we don't need Context's propagation mechanism. Direct prop resolution is simpler and more efficient.
+
+### Decision 4: ExtraFields via Component Props
+
+**Problem**: How should custom fields integrate with resource schemas?
+
+**Solution**: Pass extra fields directly as props to wrapper components
+
+**Why This Approach?**
+
+Since we're creating Resource elements directly in the plugin function, we can create wrapper components that inject extra fields as props to the default Edit/Create components. The default components then handle rendering these fields.
+
+**Implementation**:
+```typescript
+// index.ts
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  const { extraFields = {} } = props || {};
+  const eventExtraFields = extraFields.events || [];
+  
+  // Create wrapper components that pass extraFields to default components
+  const EventEditComponent = () => 
+    React.createElement(DefaultEventEdit, { 
+      FormComponent: EventFormComponent, 
+      extraFields: eventExtraFields 
+    });
+  
+  const EventCreateComponent = () => 
+    React.createElement(DefaultEventCreate, { 
+      FormComponent: EventFormComponent, 
+      extraFields: eventExtraFields 
+    });
+  
+  return [
+    React.createElement(Resource, {
+      key: "events",
+      name: "events",
+      list: EventListComponent,
+      edit: EventEditComponent,  // Wrapper that injects extraFields
+      create: EventCreateComponent,  // Wrapper that injects extraFields
+      icon: EventIcon
+    }),
+    // ... other resources
+  ];
 };
 
-// Usage in resource components
-const EventEdit = (props) => {
-  const FormComponent = useOverride('EventForm', DefaultEventForm);
+// DefaultEventEdit.tsx
+interface DefaultEventEditProps {
+  FormComponent?: ComponentType<any>;
+  extraFields?: string[];
+}
+
+export const DefaultEventEdit = ({ 
+  FormComponent = DefaultEventForm, 
+  extraFields = [] 
+}: DefaultEventEditProps) => {
   return (
-    <Edit {...props}>
-      <FormComponent />
+    <Edit>
+      <FormComponent extraFields={extraFields} />
     </Edit>
   );
 };
 ```
 
 **Benefits**:
-- ✅ No prop drilling
-- ✅ Type-safe override keys
-- ✅ Fallback to defaults
-- ✅ Easy to test
-
-**Alternatives Considered**:
-- ❌ Props drilling: Verbose, maintenance burden
-- ❌ Module-level configuration: Breaks with multiple plugin instances
-- ❌ Registry pattern: Over-engineered for current needs
-
-### Decision 4: ExtraFields Schema Merging
-
-**Problem**: How should custom fields integrate with resource schemas?
-
-**Solution**: Merge extra fields into data provider transforms
-
-**Why This Approach?**
-
-React Admin's data provider pattern allows transformation of data before sending to backend. Merging extra fields at this layer ensures they persist without modifying default forms.
-
-**Implementation**:
-```typescript
-const EventResource = () => {
-  const extraFields = useExtraFields('events');
-  
-  // Merge extraFields into resource schema
-  const transformData = (data) => ({
-    ...data,
-    ...extraFields.reduce((acc, field) => ({
-      ...acc,
-      [field]: data[field]
-    }), {})
-  });
-  
-  return (
-    <Resource
-      name="events"
-      list={EventList}
-      edit={(props) => <EventEdit transform={transformData} {...props} />}
-      create={(props) => <EventCreate transform={transformData} {...props} />}
-    />
-  );
-};
-```
-
-**Benefits**:
+- ✅ Simple prop passing - no context needed
+- ✅ Type-safe with TypeScript interfaces
+- ✅ Clear data flow from plugin config → wrapper → default components
 - ✅ Works with any form structure
 - ✅ Doesn't require form knowledge
 - ✅ Clean separation of concerns
-- ✅ Backend-agnostic
 
 ### Decision 5: Permission-Based Action Filtering
 
@@ -349,16 +443,16 @@ Permissions may depend on runtime data (user role, resource ownership). Function
 **Implementation**:
 ```typescript
 // Permissions configuration
-<EventsPlugin
-  permissions={{
+{...EventsPlugin({
+  permissions: {
     events: {
       create: (user) => user.role === 'admin',
       edit: (user, record) => user.role === 'admin' || record.ownerId === user.id,
       delete: (user) => user.role === 'admin',
       list: true
     }
-  }}
-/>
+  }
+})}
 
 // Permission check in component
 const EventList = (props) => {
@@ -427,37 +521,43 @@ For production, publish as scoped npm package:
 
 ### Resource Component Pattern
 
-Each resource (Events, Speakers, Venues) follows this pattern:
+Resources are registered directly within the `EventsPlugin` function:
 
 ```typescript
-// resources/events/index.tsx
-import { Resource } from 'react-admin';
-import { useOverride } from '../../context/OverridesContext';
-import DefaultEventList from './DefaultEventList';
-import DefaultEventEdit from './DefaultEventEdit';
-import DefaultEventCreate from './DefaultEventCreate';
-
-export const EventResource = () => {
-  const ListComponent = useOverride('EventList', DefaultEventList);
-  const EditComponent = useOverride('EventEdit', DefaultEventEdit);
-  const CreateComponent = useOverride('EventCreate', DefaultEventCreate);
+// index.ts
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  const {
+    overrides = {},
+    extraFields = {},
+    permissions = {},
+  } = props || {};
   
-  return (
-    <Resource
-      name="events"
-      list={ListComponent}
-      edit={EditComponent}
-      create={CreateComponent}
-    />
-  );
+  // Apply component overrides
+  const EventListComponent = overrides.EventList || DefaultEventList;
+  const EventEditComponent = overrides.EventEdit || DefaultEventEdit;
+  const EventCreateComponent = overrides.EventCreate || DefaultEventCreate;
+  
+  // Return array of Resource elements
+  return [
+    React.createElement(Resource, {
+      key: "events",
+      name: "events",
+      list: EventListComponent,
+      edit: EventEditComponent,
+      create: EventCreateComponent,
+      icon: EventIcon
+    }),
+    // ... other resources
+  ];
 };
 ```
 
 **Why This Pattern?**
-- Encapsulates resource configuration
-- Cleanly integrates overrides
-- Easy to test individual resources
-- Maintains TypeScript safety
+- Direct registration with React Admin
+- Simple override resolution (no context needed)
+- Type-safe component resolution
+- Efficient - no intermediate components
+- Clear control flow from props to resources
 
 ### Default Component Exports
 
@@ -516,14 +616,25 @@ export interface OverridesConfig {
   // ... other overrideable components
 }
 
+export interface EventsPluginConfig {
+  overrides?: OverridesConfig;
+  extraFields?: ExtraFieldsConfig;
+  permissions?: PermissionsConfig;
+}
+
+// index.ts
+export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
+  // Implementation
+};
+
 // TypeScript ensures only valid keys
-<EventsPlugin
-  overrides={{
+{...EventsPlugin({
+  overrides: {
     EventForm: CustomEventForm,
     // @ts-error: Invalid key
     InvalidKey: SomeComponent
-  }}
-/>
+  }
+})}
 ```
 
 ## Performance Considerations
@@ -540,15 +651,23 @@ React Admin lazy-loads Resource components by default. Plugin resources only loa
 
 ### Re-render Optimization
 
-Context providers use value memoization:
+Plugin function is pure and creates elements only once at mount:
 
 ```typescript
-const overridesValue = useMemo(() => overrides, [overrides]);
+// Called once when Admin mounts
+const resources = EventsPlugin({ overrides, extraFields });
 
-<OverridesContext.Provider value={overridesValue}>
-  {children}
-</OverridesContext.Provider>
+// Resources are stable - no re-renders unless Admin re-mounts
+<Admin>
+  {...resources}
+</Admin>
 ```
+
+**Benefits**:
+- No context re-renders
+- Resources created once at mount time
+- Component overrides resolved immediately
+- Minimal runtime overhead
 
 ### Tree Shaking
 
@@ -688,20 +807,23 @@ const CustomEventForm = () => (
 
 ### Plugin Resources Not Appearing
 
-**Cause**: Plugin not placed as direct child of `<Admin>`
+**Cause**: Plugin array not spread correctly into `<Admin>` children
 
 **Solution**:
 ```typescript
-// ✅ Correct
+// ✅ Correct - Use spread operator
 <Admin dataProvider={dataProvider}>
-  <EventsPlugin />
+  {...EventsPlugin()}
 </Admin>
 
-// ❌ Incorrect
+// ❌ Incorrect - Missing spread operator
 <Admin dataProvider={dataProvider}>
-  <div>
-    <EventsPlugin /> {/* Wrapped in div */}
-  </div>
+  {EventsPlugin()}  {/* Returns array, not valid JSX */}
+</Admin>
+
+// ❌ Incorrect - Trying to use as component
+<Admin dataProvider={dataProvider}>
+  <EventsPlugin />  {/* Not a component, it's a function */}
 </Admin>
 ```
 
