@@ -23,3 +23,8 @@ export declare const EventsPlugin: (props?: EventsPluginConfig) => ReactElement[
 export type { EventsPluginConfig } from './types/config';
 export type { Event, Speaker, Venue, Session } from './types/resources';
 export { validateEventDates } from './utils/eventValidators';
+export { DefaultScheduleBuilder } from './resources/schedule/DefaultScheduleBuilder';
+export { DefaultEventList } from './resources/events/DefaultEventList';
+export { DefaultEventEdit } from './resources/events/DefaultEventEdit';
+export { DefaultEventCreate } from './resources/events/DefaultEventCreate';
+export { DefaultEventForm } from './resources/events/DefaultEventForm';

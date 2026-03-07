@@ -6,7 +6,7 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "source": "./index.ts",
+  "source": "./index.tsx",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -33,6 +33,7 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-admin": "^4.16.0",
+    "react-router-dom": "^6.1.0",
     "@mui/material": "^5.14.0"
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "rrule": "^2.8.1"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",

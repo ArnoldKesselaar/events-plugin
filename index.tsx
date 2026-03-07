@@ -2,8 +2,7 @@
 // @quicklaunch/events-plugin - Events management plugin for React Admin
 
 import React, { type ReactElement } from 'react';
-import { Resource, CustomRoutes } from 'react-admin';
-import { Route } from 'react-router-dom';
+import { Resource } from 'react-admin';
 import EventIcon from '@mui/icons-material/Event';
 import PersonIcon from '@mui/icons-material/Person';
 import PlaceIcon from '@mui/icons-material/Place';
@@ -150,7 +149,7 @@ export const EventsPlugin = (props?: EventsPluginConfig): ReactElement[] => {
 
 // ============================================================================
 // TYPE EXPORTS
-// ============================================================================
+//============================================================================
 
 export type { EventsPluginConfig } from './types/config';
 
@@ -168,3 +167,14 @@ export type {
 
 // Export utility functions for client use
 export { validateEventDates } from './utils/eventValidators';
+
+// ============================================================================
+// COMPONENT EXPORTS
+// ============================================================================
+
+// Export default components for customization and direct use
+export { DefaultScheduleBuilder } from './resources/schedule/DefaultScheduleBuilder';
+export { DefaultEventList } from './resources/events/DefaultEventList';
+export { DefaultEventEdit } from './resources/events/DefaultEventEdit';
+export { DefaultEventCreate } from './resources/events/DefaultEventCreate';
+export { DefaultEventForm } from './resources/events/DefaultEventForm';
